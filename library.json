@@ -34,5 +34,8 @@
             "platforms": "rp2040"
         }
     ],
-    "headers": "fauxmoESP.h"
+    "headers": "fauxmoESP.h",
+    "examples": [
+        "examples/*/*.ino"
+    ]
 }

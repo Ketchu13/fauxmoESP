@@ -137,6 +137,8 @@ Current status of the library:
 
 * Latest version of ESP Async Webserver fails building with the current setup. Use version 1.2.2 max. See fauxmoESP_External_Server example `platformio.ini` file.
 
+**e.g. : build_flags = -g -DDEBUG_FAUXMO=Serial -DDEBUG_FAUXMO_VERBOSE_TCP=0 -DDEBUG_FAUXMO_VERBOSE_UDP=0 -DPIO_FRAMEWORK_ARDUINO_LWIP_HIGHER_BANDWIDTH**
+
 [1]:https://github.com/esp8266/Arduino
 [2]:http://docs.platformio.org/en/stable/platforms/espressif8266.html#using-arduino-framework-with-staging-version
 [3]:https://github.com/me-no-dev/ESPAsyncTCP

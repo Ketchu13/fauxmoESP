@@ -3,6 +3,7 @@
 FAUXMO ESP
 
 Copyright (C) 2018-2020 by Xose Pérez <xose dot perez at gmail dot com>
+2023 - by Nicolas Grimaud - aka Ketchu13 <ketchu13 at hotmail dot com>
 
 The MIT License (MIT)
 
@@ -36,7 +37,11 @@ PROGMEM const char FAUXMO_TCP_HEADERS[] =
 
 PROGMEM const char FAUXMO_TCP_STATE_RESPONSE[] = "["
     "{\"success\":{\"/lights/%d/state/on\":%s}},"
-    "{\"success\":{\"/lights/%d/state/bri\":%d}}"   // not needed?
+    "{\"success\":{\"/lights/%d/state/bri\":%d}}"
+    /*,"   // not needed?
+    "{\"success\":{\"/lights/%d/state/hue\":%d}},"   // not needed?
+    "{\"success\":{\"/lights/%d/state/sat\":%d}},"   // not needed?
+    "{\"success\":{\"/lights/%d/state/ct\":%d}}"    // not needed?*/
 "]";
 
 // Working with gen1 and gen3, ON/OFF/%, gen3 requires TCP port 80
@@ -49,15 +54,15 @@ PROGMEM const char FAUXMO_DEVICE_JSON_TEMPLATE[] = "{"
     "\"productname\": \"E4\","
     "\"state\":{"
         "\"on\": %s,"
-	"\"bri\": %d,"
-	"\"xy\": [0,0],"
-	"\"hue\": 0,"
-	"\"sat\": 0,"
-	"\"effect\": \"none\","
-	"\"colormode\": \"xy\","
-	"\"ct\": 500,"
-	"\"mode\": \"homeautomation\","
-	"\"reachable\": true"
+        "\"bri\": %d,"
+        "\"xy\": [0,0],"
+        "\"hue\": %d,"
+        "\"sat\": %d,"
+        "\"effect\": \"none\","
+        "\"colormode\": \"xy\","
+        "\"ct\": %d,"
+        "\"mode\": \"homeautomation\","
+        "\"reachable\": true"
     "},"
     "\"capabilities\": {"
         "\"certified\": false,"
@@ -105,3 +110,8 @@ PROGMEM const char FAUXMO_UDP_RESPONSE_TEMPLATE[] =
     "ST: urn:schemas-upnp-org:device:basic:1\r\n"  // _deviceType
     "USN: uuid:2f402f80-da50-11e1-9b23-%s::upnp:rootdevice\r\n" // _uuid::_deviceType
     "\r\n";
+
+PROGMEM const char FAUXMO_DEVICE_JSON_EMPTY[] = "{}";
+const char FAUXMO_DEVICE_JSON_I[] PROGMEM = " \"%d\":%s ";
+const char FAUXMO_DEVICE_JSON_J[] PROGMEM = "%s";
+const char FAUXMO_DEVICETYPE_RESPONSE[] PROGMEM = "[{\"success\":{\"username\": \"%s\"}}]";

@@ -32,22 +32,21 @@ THE SOFTWARE.
 #define FAUXMO_UDP_MULTICAST_PORT   1900
 #define FAUXMO_TCP_MAX_CLIENTS      10
 #define FAUXMO_TCP_PORT             1901
-#define FAUXMO_RX_TIMEOUT           3
+#define FAUXMO_RX_TIMEOUT           4
 #define FAUXMO_DEVICE_UNIQUE_ID_LENGTH  12
-
-//#define DEBUG_FAUXMO                Serial
+#define FAUXMO_DEBUG
+#define DEBUG
+#define DEBUG_FAUXMO              Serial
 #ifdef DEBUG_FAUXMO
     #if defined(ARDUINO_ARCH_ESP32)
         #define DEBUG_MSG_FAUXMO(fmt, ...) { DEBUG_FAUXMO.printf_P((PGM_P) PSTR(fmt), ## __VA_ARGS__); }
     #else
         #define DEBUG_MSG_FAUXMO(fmt, ...) { DEBUG_FAUXMO.printf(fmt, ## __VA_ARGS__); }
     #endif
-#else
-    #define DEBUG_MSG_FAUXMO(...)
 #endif
 
 #ifndef DEBUG_FAUXMO_VERBOSE_TCP
-#define DEBUG_FAUXMO_VERBOSE_TCP    false
+#define DEBUG_FAUXMO_VERBOSE_TCP    true
 #endif
 
 #ifndef DEBUG_FAUXMO_VERBOSE_UDP
@@ -62,8 +61,6 @@ THE SOFTWARE.
 #elif defined(ESP32)
     #include <WiFi.h>
     #include <AsyncTCP.h>
-#elif defined(ARDUINO_RASPBERRY_PI_PICO_W)
-    #include <AsyncTCP_RP2040W.h>
 #else
 	#error Platform not supported
 #endif
@@ -74,12 +71,25 @@ THE SOFTWARE.
 #include <MD5Builder.h>
 #include "templates.h"
 
-typedef std::function<void(unsigned char, const char *, bool, unsigned char)> TSetStateCallback;
+typedef std::function<void(
+    unsigned char,  // device id
+    const char *,   // device name
+    bool,           // state (on/off)
+    unsigned char,  // value (0-255)
+    unsigned char,  // brightness (0-255)
+    unsigned char,  // hue (0-255)
+    unsigned char,  // saturation (0-255)
+    unsigned char   // kelvin (0-255)
+)> TSetStateCallback;
 
 typedef struct {
     char * name;
     bool state;
     unsigned char value;
+    unsigned char brightness;
+    unsigned char hue;
+    unsigned char saturation;
+    unsigned char kelvin;
     char uniqueid[28];
 } fauxmoesp_device_t;
 
@@ -96,31 +106,50 @@ class fauxmoESP {
         bool removeDevice(const char * device_name);
         char * getDeviceName(unsigned char id, char * buffer, size_t len);
         int getDeviceId(const char * device_name);
-        void setDeviceUniqueId(unsigned char id, const char *uniqueid);
+        //void setDeviceUniqueId(unsigned char id, const char *uniqueid);
         void onSetState(TSetStateCallback fn) { _setCallback = fn; }
         bool setState(unsigned char id, bool state, unsigned char value);
         bool setState(const char * device_name, bool state, unsigned char value);
-        bool process(AsyncClient *client, bool isGet, String url, String body);
+        bool setState(
+            unsigned char id,
+            bool state,
+            unsigned char value,
+            unsigned char brightness,
+            unsigned char hue,
+            unsigned char saturation,
+            unsigned char kelvin);
+        bool setState(const char *device_name, bool state, unsigned char value, unsigned char brightness, unsigned char hue, unsigned char saturation, unsigned char kelvin);
+        
+        bool process(AsyncClient *client, bool isGet, char * url, char * body);
         void enable(bool enable);
         void createServer(bool internal) { _internal = internal; }
         void setPort(unsigned long tcp_port) { _tcp_port = tcp_port; }
+        void setUniqueIdSuffix(const char *suffix);
+        void setUserName(const char *user_name);
+        void getUserName(char *user_name);
+        void getDeviceCount(int *count);
+        fauxmoesp_device_t *getDevice(unsigned char id);
         void handle();
+        void printInColor(String text, String color);
+        void printInColor(String text, String color, bool newLine);
+        void printInColorln(String text, String color);
 
     private:
-
         AsyncServer * _server;
         bool _enabled = false;
         bool _internal = true;
         unsigned int _tcp_port = FAUXMO_TCP_PORT;
         std::vector<fauxmoesp_device_t> _devices;
+        const char *_uniqueIdSuffix = "00:00";
+        char _user_name[56];
 		#ifdef ESP8266
-        WiFiEventHandler _handler;
+            WiFiEventHandler _handler;
 		#endif
         WiFiUDP _udp;
         AsyncClient * _tcpClients[FAUXMO_TCP_MAX_CLIENTS];
         TSetStateCallback _setCallback = NULL;
 
-        String _deviceJson(unsigned char id, bool all); 	// all = true means we are listing all devices so use full description template
+        char * _deviceJson(unsigned char id, bool all); 	// all = true means we are listing all devices so use full description template
 
         void _handleUDP();
         void _onUDPData(const IPAddress remoteIP, unsigned int remotePort, void *data, size_t len);
@@ -128,10 +157,10 @@ class fauxmoESP {
 
         void _onTCPClient(AsyncClient *client);
         bool _onTCPData(AsyncClient *client, void *data, size_t len);
-        bool _onTCPRequest(AsyncClient *client, bool isGet, String url, String body);
-        bool _onTCPDescription(AsyncClient *client, String url, String body);
-        bool _onTCPList(AsyncClient *client, String url, String body);
-        bool _onTCPControl(AsyncClient *client, String url, String body);
+        bool _onTCPRequest(AsyncClient *client, bool isGet, char * url, char * body);
+        bool _onTCPDescription(AsyncClient *client, char * url, char * body);
+        bool _onTCPList(AsyncClient *client, char *url, char *body);
+        bool _onTCPControl(AsyncClient *client, char *url, char *body);
         void _sendTCPResponse(AsyncClient *client, const char * code, char * body, const char * mime);
 
         String _byte2hex(uint8_t zahl);
