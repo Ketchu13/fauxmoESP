@@ -31,11 +31,27 @@ THE SOFTWARE.
 #include <vector>
 
 // -----------------------------------------------------------------------------
-// UDP
+// Utils
 // -----------------------------------------------------------------------------
+// Supprime les caractères "\r\n" de la chaîne de caractères donnée
+void fauxmoESP::_removeNewlines(char* str)
+{
+    int len = strlen(str); // Longueur de la chaîne de caractères donnée
+    int i = 0, j = 0; // Indices pour parcourir la chaîne de caractères donnée et la chaîne résultante
+    while (i < len) {
+        // Vérifier si le caractère actuel est "\r" ou "\n"
+        if (str[i] != '\r' && str[i] != '\n') {
+            // Si le caractère actuel n'est pas "\r" ou "\n", copier dans la chaîne résultante
+            str[j++] = str[i];
+        }
+        i++; // Avancer dans la chaîne de caractères donnée
+    }
+    //str[j] = '\0'; // Terminer la chaîne résultante
+}
+
 void fauxmoESP::printInColor(String text, String color) {
   // Set the appropriate ANSI escape code for the given color
-  String escapeCode = "\033[30m";
+  String escapeCode = "\033[30m"; // TODO remove string
   if (color == "black") {
     escapeCode = "\033[30m";
   } else if (color == "red") {
@@ -80,7 +96,7 @@ void fauxmoESP::printInColor(String text, String color) {
   Serial.print(text);
   Serial.print("\033[0m");
 }
-void fauxmoESP::printInColor(String text, String color, bool newline) {
+void fauxmoESP::printInColor(String text, String color, bool newline) { //TODO use DEBUG FAUXMO
   printInColor(text, color);
   if (newline) {
     Serial.println();
@@ -89,12 +105,11 @@ void fauxmoESP::printInColor(String text, String color, bool newline) {
 void fauxmoESP::printInColorln(String text, String color) {
   printInColor(text, color, true);
 }
+
 // Function to extract the value from the URL
-unsigned char extractValueFromText(char *url, char *searchString, char lastChar = '\0') { // NOTE: ok
+unsigned char fauxmoESP::_extractValueFromText(char *url, char *searchString, char lastChar = '\0') { // NOTE: ok
   // Find the position of the search string in the URL
   char *searchIndex = strstr(url, searchString);
-  // printInColor("url: ", "lightblue");
-  // Serial.println(url);
   if (searchIndex != NULL) {
     // Get the index of the start of the substring we want to extract
     int startIndex = searchIndex - url + strlen(searchString) + 1;
@@ -106,36 +121,35 @@ unsigned char extractValueFromText(char *url, char *searchString, char lastChar 
     // Extract the substring from the URL
     char valueString[20];
     snprintf(valueString, sizeof(valueString), "%.*s", endIndex - startIndex, url + startIndex);
-    // printInColor("valueString: ", "lightblue");
-    // Serial.println(valueString);
 
     // Convert the value to an unsigned char and return it
     return (unsigned char)atoi(valueString);
-    free (searchIndex);
-    free (valueString);
+    free(searchIndex);
+    free(valueString);
   } else {
     // If the search string was not found in the URL, return 0
     return 0;
   }
 }
 
-void parseJsonString(
-    String jsonString,
-    bool &state,
-    int &brightness,
-    int &hue,
-    int &saturation,
-    int &kelvin) {
+void fauxmoESP::_parseJsonString(String jsonString, bool &state, int &brightness, int &hue, int &saturation, int &kelvin) {
+
   int i = 0;
   int len = jsonString.length();
-  Serial.print("jsonString: ");
-  Serial.println(jsonString);  
+
+#ifdef DEBUG_FAUXMO
+  DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m _parseJsonString :");
+#endif
+  unsigned char keysCount = 0;
   while (i < len) {
     // Find the key
     int keyStart = jsonString.indexOf('"', i);
     int keyEnd = jsonString.indexOf('"', keyStart + 1);
     String key = jsonString.substring(keyStart + 1, keyEnd);
 
+    Serial.print("_parseJsonString key: ");
+
+    Serial.println(key);
     // Find the value
     int valueStart = jsonString.indexOf(':', keyEnd + 1);
     int valueEnd = jsonString.indexOf(',', valueStart + 1);
@@ -147,51 +161,37 @@ void parseJsonString(
     Serial.println(key);
     Serial.print("value: ");
     Serial.println(value);
+
     
-    if (key == "on") {
-      state = value == "true";
-    }
     if (key == "bri") {
+      keysCount++;
       brightness = value.toInt();
     }
     if (key == "hue") {
+      keysCount++;
       hue = value.toInt();
     }
     if (key == "sat") {
+      keysCount++;
       saturation = value.toInt();
     }
     if (key == "ct") {
+      keysCount++;
       kelvin = value.toInt();
+    }
+    if (key == "on") {
+      keysCount++;
+      state = value == "true" ? true : false;
     }
     // Move the index to the next key-value pair
     i = valueEnd + 1;
   }
-}
-
-int indexOfStringInCharArray(char *haystack, char *needle) {
-  int pos = -1;
-  int len = strlen(needle);
-  // needle size can vary, so we need to check all the possible positions
-  for (int i = 0; i < (int)strlen(haystack); i++) {
-    if (haystack[i] == needle[0]) {
-      // check if the rest of the needle matches
-      bool match = true;
-      for (int j = 1; j < len; j++) {
-        if (haystack[i + j] != needle[j]) {
-          match = false;
-          break;
-        }
-      }
-      if (match) {
-        pos = i;
-        break;
-      }
-    }
+  if(keysCount == 1 && state == true) {
+    brightness = 254;
   }
-  return pos;
 }
 
-void extract_json_content(char *body, char *content) {
+void fauxmoESP::_extract_json_content(char *body, char *content) {
   int start_index = -1;
   int end_index = -1;
   int depth = 0;
@@ -225,6 +225,73 @@ void extract_json_content(char *body, char *content) {
   }
 }
 
+void fauxmoESP::_deviceJson(unsigned char id, char* buffer1, bool all = true) { // NOTE: seams ok
+
+  if (id >= _devices.size())
+    snprintf(
+        buffer1, strlen(buffer1),
+        FAUXMO_DEVICE_JSON_EMPTY);
+
+  fauxmoesp_device_t device = _devices[id];
+
+#ifdef DEBUG_FAUXMO
+  DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m deviceJson-Sending device info for \"%s\", uniqueID = \"%s\"\n", device.name, device.uniqueid);
+#endif
+
+  if (all) {
+    Serial.print("strlen(buffer1): ");
+    Serial.println(strlen(buffer1));
+    Serial.print("sizeof(buffer1): ");
+    Serial.println(sizeof(buffer1));
+    snprintf_P(
+        buffer1, 512,
+        FAUXMO_DEVICE_JSON_TEMPLATE,
+        device.name, device.uniqueid,
+        device.state ? "true" : "false",
+        device.brightness,
+        device.hue,
+        device.saturation,
+        device.kelvin);
+
+  } else {
+    Serial.print("strlen(ebuffer1): ");
+    Serial.println(strlen(buffer1));
+    Serial.print("sizeof(ebuffer1): ");
+    Serial.println(sizeof(buffer1));
+    snprintf_P(
+        buffer1, 512,
+        FAUXMO_DEVICE_JSON_TEMPLATE_SHORT,
+        device.name, device.uniqueid);
+  }
+
+} // _deviceJson
+
+String fauxmoESP::_byte2hex(uint8_t zahl) {
+  String hstring = String(zahl, HEX);
+  if (zahl < 16) {
+    hstring = "0" + hstring;
+  }
+
+  return hstring;
+} // _byte2hex
+
+String fauxmoESP::_makeMD5(String text) {
+  unsigned char bbuf[16];
+  String hash = "";
+  MD5Builder md5;
+  md5.begin();
+  md5.add(text);
+  md5.calculate();
+  md5.getBytes(bbuf);
+  for (uint8_t i = 0; i < 16; i++) {
+    hash += _byte2hex(bbuf[i]);
+  }
+  return hash;
+} // _makeMD5
+
+// -----------------------------------------------------------------------------
+// UDP
+// -----------------------------------------------------------------------------
 void fauxmoESP::_sendUDPResponse() {
 
 #ifdef DEBUG_FAUXMO
@@ -241,16 +308,8 @@ void fauxmoESP::_sendUDPResponse() {
       }
     }
     mac[i] = tolower(mac[i]);
-  }
+  } 
 
-  
-  printInColor("mac: ", "lightblue");
-  Serial.println(mac);
-  Serial.print(".");
-  printInColor("_tcp_port: ", "lightblue");
-  Serial.println(_tcp_port);
-  Serial.print(".");
-  
   char response[strlen(FAUXMO_UDP_RESPONSE_TEMPLATE) + 128];
   snprintf_P(
       response, sizeof(response),
@@ -258,8 +317,7 @@ void fauxmoESP::_sendUDPResponse() {
       ip[0], ip[1], ip[2], ip[3],
       _tcp_port,
       mac, mac);
-  printInColor("response: ", "lightblue");
-  Serial.println(response);
+
 #if DEBUG_FAUXMO_VERBOSE_UDP
   DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m UDP response sent to %s:%d\n%s", _udp.remoteIP().toString().c_str(), _udp.remotePort(), response);
 #endif
@@ -316,101 +374,20 @@ void fauxmoESP::_sendTCPResponse(AsyncClient *client, const char *code, char *bo
   client->write(body);
 }
 
-char *fauxmoESP::_deviceJson(unsigned char id, bool all = true) { // NOTE: seams ok
-  // Serial.print("_devices.size() = ");
-  // Serial.println(_devices.size());
-  // Serial.print("id = ");
-  // Serial.println(id);
-  if (id >= _devices.size())
-    // const char * to char * conversion
-    return (char *)FAUXMO_DEVICE_JSON_EMPTY;
-
-  fauxmoesp_device_t device = _devices[id];
-
-#ifdef DEBUG_FAUXMO
-  DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m deviceJson-Sending device info for \"%s\", uniqueID = \"%s\"\n", device.name, device.uniqueid);
-#endif
-
-  if (all) {
-    // allocate memory for the buffer
-    char buffer1[strlen_P(FAUXMO_DEVICE_JSON_TEMPLATE) + 64];
-    // Serial.println(strlen_P(FAUXMO_DEVICE_JSON_TEMPLATE));
-    // Serial.println(strlen_P(device.name));
-    // Serial.println(strlen_P(device.uniqueid));
-    // Serial.println(strlen_P(device.state ? "true" : "false"));
-    // check if device parameters are set
-    // check length of each parameter
-    
-    snprintf_P(
-        buffer1, sizeof(buffer1),
-        FAUXMO_DEVICE_JSON_TEMPLATE,
-        device.name, device.uniqueid,
-        device.state ? "true" : "false",
-        device.brightness,
-        device.hue,
-        device.saturation,
-        device.kelvin);
-    // Serial.println("buffer1");
-    // Serial.println(buffer1);
-    return strdup(buffer1);
-    
-  } else {
-    char buffer2[strlen_P(FAUXMO_DEVICE_JSON_TEMPLATE_SHORT) + 64];
-    // Serial.println(strlen_P(FAUXMO_DEVICE_JSON_TEMPLATE_SHORT));
-    // Serial.println(strlen_P(device.name));
-    // Serial.println(strlen_P(device.uniqueid));
-    snprintf_P(
-        buffer2, sizeof(buffer2),
-        FAUXMO_DEVICE_JSON_TEMPLATE_SHORT,
-        device.name, device.uniqueid);
-    // Serial.println("buffer2");
-    // Serial.println(buffer2);
-    return strdup(buffer2);
-  }
-
-} // _deviceJson
-
-String fauxmoESP::_byte2hex(uint8_t zahl) {
-  String hstring = String(zahl, HEX);
-  if (zahl < 16) {
-    hstring = "0" + hstring;
-  }
-
-  return hstring;
-}
-
-String fauxmoESP::_makeMD5(String text) {
-  unsigned char bbuf[16];
-  String hash = "";
-  MD5Builder md5;
-  md5.begin();
-  md5.add(text);
-  md5.calculate();
-
-  md5.getBytes(bbuf);
-  for (uint8_t i = 0; i < 16; i++) {
-    hash += _byte2hex(bbuf[i]);
-  }
-  return hash;
-}
-
 bool fauxmoESP::_onTCPDescription(AsyncClient *client, char *url, char *body) { // NOTE: seams ok
 
   (void)url;
   (void)body;
 
 #ifdef DEBUG_FAUXMO
-  //DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m onTCPDescription-Handling /description.xml request\n");
+  DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m onTCPDescription-Handling /description.xml request\n");
 #endif
 
   IPAddress ip = WiFi.localIP();
   // create the uniqueid
   char mac[18];
-  // WiFi.macAddress() mac var
-  // add to ns the <mac address>:<unique id suffix>-<device id> (device id must be a two digit number)
   snprintf_P(mac, 18, PSTR("%s"), WiFi.macAddress().c_str());
-  // Serial.print("347-uniqueid: ");
-  // Serial.println(mac);
+  
   //  replace ':' with ''  and convert to lower case
   for (int i = 0; i < (int)strlen(mac); i++) {
     if (mac[i] == ':') {
@@ -422,19 +399,6 @@ bool fauxmoESP::_onTCPDescription(AsyncClient *client, char *url, char *body) { 
   }
 
 #ifdef DEBUG_FAUXMO
-  /*printInColor("ip:", "yellow");
-  Serial.println(ip);
-  printInColor("MAC:", "yellow");
-  Serial.println(mac);*/
-  /*printInColor("onTCPDescription-url:", "yellow");
-  Serial.println(url);
-  printInColor("onTCPDescription-body: ", "yellow");
-  if (body != NULL && strlen(body) > 0) {
-    Serial.println(body);
-  } else {
-    Serial.println("NULL");
-  }*/
-
   /*//  get remote client ip address
   u_int32_t ipaddr = client->getRemoteAddress();
   //  convert to string
@@ -450,75 +414,24 @@ bool fauxmoESP::_onTCPDescription(AsyncClient *client, char *url, char *body) { 
       ip[0], ip[1], ip[2], ip[3], _tcp_port,
       ip[0], ip[1], ip[2], ip[3], _tcp_port,
       mac, mac);
-  //printInColor("onTCPDescription-384-response:", "red");
-  //Serial.println(response);
+
   _sendTCPResponse(client, "200 OK", response, "text/xml");
   return true;
 }
-char *removeCrLf(const char *A_str) {
-  // Find the length of the input string
-  size_t inputLen = strlen(A_str);
 
-  // Allocate memory for the output string
-  char *outputStr = new char[inputLen + 1];
-
-  // Initialize the output string index and the "found" flag
-  size_t outputIndex = 0;
-  bool foundCrLf = false;
-
-  // Loop through the input string
-  for (size_t i = 0; i < inputLen; i++) {
-    // Check if the current character is a carriage return
-    if (A_str[i] == '\r') {
-      // Check if the next character is a newline
-      if (i < inputLen - 1 && A_str[i + 1] == '\n') {
-        // Set the "found" flag to true
-        foundCrLf = true;
-        // Skip the newline character
-        i++;
-        // Continue to the next iteration of the loop
-        continue;
-      }
-    }
-
-    // Copy the current character to the output string
-    outputStr[outputIndex++] = A_str[i];
-  }
-
-  // Null-terminate the output string
-  outputStr[outputIndex] = '\0';
-
-  // Check if the "found" flag is set
-  if (foundCrLf) {
-    // Free the memory allocated for the original string
-    delete[] A_str;
-
-    // Return the new string
-    return outputStr;
-  } else {
-    // The original string did not contain "\r\n", so just return it
-    return const_cast<char *>(A_str);
-  }
-  delete[] outputStr;
-}
 bool fauxmoESP::_onTCPList(AsyncClient *client, char *url, char *body) { // NOTE: seams to be ok
 
 #ifdef DEBUG_FAUXMO
   DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m onTCPList-Handling list request\n");
 #endif
-  // printInColor("_onTCPList url:", "yellow");
-  // Serial.println(url);
-  //  Serial.println(body);
+
   char wordsquery[] = "lights";
   // Get all char in the url after the "lights" and finishing at the end of string
-  unsigned char id = extractValueFromText(url, wordsquery);
-  // printInColor("onTCPList-id:", "yellow");
-  // Serial.println(id);
+  unsigned char id = _extractValueFromText(url, wordsquery);
+ 
   //  This will hold the response string
-  char response[2048];
-  printInColor("onTCPList-409-response empty:", "blue");
-  Serial.println(strlen(response) > 0 ? "NO" : "YES");
-  
+  char response[2048]={0};
+
   // Client is requesting all devices
   // one device string is a json string
   if (0 == id) {
@@ -528,53 +441,47 @@ bool fauxmoESP::_onTCPList(AsyncClient *client, char *url, char *body) { // NOTE
         strcat(response, ",");
       }
 
-      char buffer3[strlen_P(FAUXMO_DEVICE_JSON_I) + 256];
-      char *jdevice = _deviceJson(i, false);
-      printInColor("onTCPList-430-jdevice:", "magenta");
-      Serial.println(jdevice);
-
-      // print jdevice length
-      printInColor("onTCPList-jdevice length: ", "magenta");
-      Serial.println(strlen(jdevice));
-
+      char buffer3[strlen_P(FAUXMO_DEVICE_JSON_I) + 512];
+      char buffer1[strlen_P(FAUXMO_DEVICE_JSON_TEMPLATE) + 128];      
+      _deviceJson(i, buffer1, false);
       snprintf_P(
           buffer3, sizeof(buffer3),
           FAUXMO_DEVICE_JSON_I,
-          i + 1, jdevice);
+          i + 1, buffer1);
+          Serial.print("buffer3: ");
+          Serial.println(buffer3);
+          Serial.print("buffer1: ");
+          Serial.println(buffer1);
+      printInColor("buffer3", "yellow");
+      Serial.println(buffer3);
       strcat(response, buffer3);
     }
+
     strcat(response, "}");
+
   } else { //  Client is requesting a single device
-    char buffer4[strlen_P(FAUXMO_DEVICE_JSON_J) + 512];
-    char *jdevice = _deviceJson(id - 1);
-    printInColor("onTCPList-jdevice:", "magenta");
-    Serial.println(jdevice);
-    snprintf_P(
-        buffer4, sizeof(buffer4),
-        FAUXMO_DEVICE_JSON_J,
-        jdevice);
+
+    //  Create a buffer to hold the device json string
+    char buffer1[strlen_P(FAUXMO_DEVICE_JSON_TEMPLATE) + 64];      
+    _deviceJson(id - 1, buffer1);
+    printInColor("buffer1", "yellow");
+    Serial.println(buffer1);
     // Add buffer to response
-    strcat(response, buffer4);
+    strcat(response, buffer1);
   }
-   // close the json string
+  // Utilisation: appel de la fonction pour la chaîne de caractères "A_str"
+  char result[strlen(response)]; // Chaîne résultante avec les caractères "\r\n" retirés
+  strcpy(result, response); // Copier la chaîne de caractères donnée dans la chaîne résultante
+  response[0] = 0;
+  _removeNewlines(result); // Appel de la fonction pour retirer les caractères "\r\n"
 
-  printInColor("OnTCPList-response: ", "blue");
-  char *modifiedStr = removeCrLf(response);
-  Serial.println(modifiedStr);
-  _sendTCPResponse(client, "200 OK", (char *)modifiedStr, "application/json");
-  // erase response
-  
-
+  printInColor("result: ","yellow");
+  Serial.println(result);
+  _sendTCPResponse(client, "200 OK", result, "application/json");
   return true;
 }
 
 bool fauxmoESP::_onTCPControl(AsyncClient *client, char *url, char *body) {
-  printInColor("onTCPControl-url:", "red");
-  Serial.println(url);
-  printInColor("onTCPControl-body:", "red");
-  Serial.println(body);
-  printInColor("onTCPControl-username:", "red");
-  Serial.println(_user_name);
   // "devicetype" request
   // check if the char * body contains the char * "devicetype"
   if (strstr(body, "devicetype") != NULL) {
@@ -586,8 +493,6 @@ bool fauxmoESP::_onTCPControl(AsyncClient *client, char *url, char *body) {
         response, sizeof(response),
         FAUXMO_DEVICETYPE_RESPONSE,
         _user_name);
-    printInColor("onTCPControl-response:", "red");
-    Serial.println(response);
     _sendTCPResponse(client, "200 OK", response, "application/json");
     return true;
   }
@@ -598,9 +503,8 @@ bool fauxmoESP::_onTCPControl(AsyncClient *client, char *url, char *body) {
   if ((strstr(url, "state") != NULL) && (body > 0)) {
     char wordsquery[] = "lights";
     // Get all char in the url after the "lights" and finishing at the end of string
-    unsigned char id = extractValueFromText(url, wordsquery, '/');
-    printInColor("517-id:", "red");
-    Serial.println(id);
+    unsigned char id = _extractValueFromText(url, wordsquery, '/');
+    
 #ifdef DEBUG_FAUXMO
     // DEBUG_MSG_FAUXMO("[FAUXMO] Handling state request\n");
 #endif
@@ -615,10 +519,10 @@ bool fauxmoESP::_onTCPControl(AsyncClient *client, char *url, char *body) {
       bool state = false;
       // body is a JSON string
       // extract parameters from JSON string
-      Serial.println("parsing json");
-      parseJsonString(strdup(body), state, brightness, hue, saturation, kelvin);
+      _parseJsonString(strdup(body), state, brightness, hue, saturation, kelvin);
 
       if (brightness > -1) {
+        _devices[id].brightness = brightness;
         _devices[id].value = brightness;
         _devices[id].state = (brightness > 0);
       }
@@ -636,24 +540,15 @@ bool fauxmoESP::_onTCPControl(AsyncClient *client, char *url, char *body) {
         _devices[id].kelvin = kelvin;
       }
 
-      if (state == false) {
-        _devices[id].state = false;
-      } else {
-        _devices[id].state = true;
-        if (_devices[id].value <= 0) {
-          _devices[id].value = 255;
-          _devices[id].brightness =_devices[id].value;
-        }
-      }
+      _devices[id].state = state;      
+      if((state == true) && (0 == _devices[id].value))
+        _devices[id].value = 254;
 
       char response[strlen_P(FAUXMO_TCP_STATE_RESPONSE) + 24];
       snprintf_P(
           response, sizeof(response),
           FAUXMO_TCP_STATE_RESPONSE,
-          id + 1,
-          _devices[id].state ? "true" : "false",
-          id + 1,
-          _devices[id].brightness
+          id + 1, _devices[id].state ? "true" : "false", id + 1, _devices[id].brightness
 #ifdef ALEXA_EXTENDED
           ,
           id + 1,
@@ -664,10 +559,10 @@ bool fauxmoESP::_onTCPControl(AsyncClient *client, char *url, char *body) {
           _devices[id].kelvin
 #endif
       );
-      printInColor("onTCPControl-sending response: ", "lightgreen");
-      Serial.println(response);
+      
       _sendTCPResponse(client, "200 OK", response, "text/xml");
-  
+      printInColor("Control rqt: ", "yellow");
+      printInColorln(response, "blue");
       if (_setCallback) {
         //_setCallback(id, _devices[id].name, _devices[id].state, _devices[id].value);
         // update the state of the device
@@ -686,7 +581,6 @@ bool fauxmoESP::_onTCPControl(AsyncClient *client, char *url, char *body) {
     }
   }
   return false;
-
 }
 
 bool fauxmoESP::_onTCPRequest(AsyncClient *client, bool isGet, char *url, char *body) {
@@ -702,13 +596,15 @@ bool fauxmoESP::_onTCPRequest(AsyncClient *client, bool isGet, char *url, char *
   if (!isGet)
     DEBUG_MSG_FAUXMO("\033[FAUXMO]\033[0m onTCPRequest Body:\n%s\n", body);
 #endif
+
   if (strlen(body) > 0) {
     DEBUG_MSG_FAUXMO("\033[32m[FAUXMOlo]\033[0m onTCPRequest Body:\n%s\n", body);
   }
-  // DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m Body:\n%s\n", body);
+
   if (strcmp_P(url, PSTR("/description.xml")) == 0) {
     return _onTCPDescription(client, url, body);
   }
+
   // check if the url starts with /api
   if (strncmp_P(url, PSTR("/api"), 4) == 0) {
     if (isGet) {
@@ -724,111 +620,18 @@ bool fauxmoESP::_onTCPData(AsyncClient *client, void *data, size_t len) {
 
   if (!_enabled)
     return false;
-  printInColor("onTCPData-data: ", "red");
-  Serial.print((char *)data);
-  Serial.println();
   // get first line of the request
-  char *line = strtok((char *)data, "\r\n");
-
-  //printInColor("onTCPData-line: ", "red");
-  //Serial.print(line);
-  //Serial.println(".");
-  /*char* method13 = strtok((char *)data, " ");
-  char* url12 = strtok(NULL, " ");
-  char* url13 = strtok(url12, " ");
-
-  printInColor("onTCPData-Method: ", "red");
-  Serial.println(method13);
-  Serial.println(".");
-
-  printInColor("onTCPData-URL: ", "red");
-  Serial.println(url13);
-  Serial.println(".");
-  char* headersEnd = strstr((char *)data, "\r\n\r\n");
-  char *body;
-  char* headersEnd2 = strstr((char *)data, "\n\n");
-  if (headersEnd != NULL) {
-    char *data_ = headersEnd + 4; // On ajoute 4 pour sauter les "\r\n\r\n"
-    Serial.print("onTCPData-696-Data: ");
-    Serial.println(data_);
-
-    // alloc var body to the real size of the body content and prevent overflow of the buffer and preserve the data
-    body = (char *)malloc(strlen(data_) + 1);
-    strcpy(body, data_);
-    Serial.print("onTCPData-702-Body: ");
-    Serial.println(body);
-
-  } else if (headersEnd2 != NULL) {
-
-    char *data_ = headersEnd + 4; // On ajoute 4 pour sauter les "\r\n\r\n"
-    Serial.print("onTCPData-708-Data: ");
-    Serial.println(data_);
-
-    // alloc var body to the real size of the body content and prevent overflow of the buffer and preserve the data
-    body = (char *)malloc(strlen(data_) + 1);
-    strcpy(body, data_);
-    Serial.print("onTCPData-714-Body: ");
-    Serial.println(body);
-
-  } else {
-
-    Serial.println("onTCPData-719-No body");
-    // set body to empty string
-    body = (char *)malloc(1);
-    strcpy(body, "");
-  }
-
-  Serial.println("onTCPData-725-tcpdata-Body:");
-  Serial.println(body);
-
-  bool isGet = (strncmp(method13, "GET", 3) == 0);
-
-  if (strlen(body) > 0) {
-    // cut body after the last "}"
-    char new_body[strlen(body)];
-    extract_json_content(body, new_body);
-    Serial.print("\033[32m[FAUXMO]\033[0m onTCPData body: ");
-    Serial.println(new_body);
-    body = strdup(new_body);
-  } else {
-    Serial.println("\033[32m[FAUXMO]\033[0m onTCPData body is empty.");
-  }
-  Serial.print("\033[32m[FAUXMO]\033[0m onTCPData-742 url: ");
-  Serial.println(url13);
-  return _onTCPRequest(client, isGet, url13, body);
-}*/
-
   char *method13 = strtok((char *)data, " ");
   char *url13 = strtok(NULL, " ");
   url13 = strtok(url13, " ");
 
-  //Serial.print("tcpdata-Method: ");
-  //Serial.println(method13);
-
-  //Serial.print("tcpdata-URL: ");
-  //Serial.println(url13);
-
   // set the char * p to the data
   char *p = (char *)data;
-
-#if DEBUG_FAUXMO_VERBOSE_TCP
-  ;
-#endif
-  /*Serial.print("\033[32m[FAUXMO]\033[0m TCP request data\n");
-  Serial.println((char *)data);
-  Serial.print("\033[32m[FAUXMO]\033[0m TCP request p\n");
-  Serial.println(String(p));*/
-
-  // Method is the first word of the request
-  char *method = p;
 
   while (*p != ' ')
     p++;
   *p = 0;
   p++;
-
-  // Split word and flag start of url
-  char *url = p;
 
   // Find next space
   while (*p != ' ')
@@ -846,28 +649,20 @@ bool fauxmoESP::_onTCPData(AsyncClient *client, void *data, size_t len) {
   }
   char *body = p;
 
-  // Serial.print("\033[32m[FAUXMO]\033[0m method: ");
-  // Serial.println(method);
   bool isGet = (strncmp(method13, "GET", 3) == 0);
-  // if "\r\n"*2 or "\n"*2 is found in p, then the body starts after that and ends after the next "\r\n" or "\n"
-  // if not found, then the body is empty
+  
   if (isGet == true && (c == 2)) {
     body = strdup("");
-  }
+  }  
+   
   if (strlen(body) > 0) {
-    // cut body after the last "}"
     char new_body[strlen(body)];
-    extract_json_content(body, new_body);
-    Serial.print("\033[32m[FAUXMO]\033[0m onTCPData body: ");
-    Serial.println(new_body);
+    _extract_json_content(body, new_body);    
     body = strdup(new_body);
-  } else {
-    Serial.println("\033[32m[FAUXMO]\033[0m onTCPData body is empty.");
   }
-  Serial.print("\033[32m[FAUXMO]\033[0m onTCPData742 url: ");
-  Serial.println(url13);
   return _onTCPRequest(client, isGet, url13, body);
 }
+
 void fauxmoESP::_onTCPClient(AsyncClient *client) {
   if (_enabled) {
     for (unsigned char i = 0; i < FAUXMO_TCP_MAX_CLIENTS; i++) {
@@ -903,7 +698,7 @@ void fauxmoESP::_onTCPClient(AsyncClient *client) {
 
         client->setRxTimeout(FAUXMO_RX_TIMEOUT);
 
-        // DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m Client #%d connected\n", i);
+        DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m Client #%d connected\n", i);
         return;
       }
     }
@@ -954,26 +749,24 @@ unsigned char fauxmoESP::addDevice(const char *device_name) {
   device.name = strdup(device_name);
   device.state = false;
   device.value = 0;
-  device.brightness= device.state? 255 : 0;
-  device.hue=0;
-  device.saturation= 0;
-  device.saturation=0;
-  device.kelvin= 0;
+  device.brightness = 0;
+  device.hue = 0;
+  device.saturation = 0;
+  device.saturation = 0;
+  device.kelvin = 500;
 
   // create the uniqueid
   char mac[18];
-
   // WiFi.macAddress() mac var
   // <mac address>:<unique id suffix>-<device id> (device id must be a two digit number)
   snprintf_P(mac, 18, PSTR("%s"), WiFi.macAddress().c_str());
-
   snprintf(device.uniqueid, 27, "%s:%s-%02X", mac, _uniqueIdSuffix, device_id);
 
   //  Attach
   _devices.push_back(device);
   // devicesNames.push_back(strdup(device_name));
 
-  // DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m addDevice-Device '%s' added as #%d\n", device_name, device_id);
+  DEBUG_MSG_FAUXMO("\033[32m[FAUXMO]\033[0m addDevice-Device '%s' added as #%d\n", device_name, device_id);
 
   return device_id;
 }
@@ -1044,6 +837,7 @@ bool fauxmoESP::setState(unsigned char id, bool state, unsigned char value) {
   if (id < _devices.size()) {
     _devices[id].state = state;
     _devices[id].value = value;
+    _devices[id].brightness = value;
     return true;
   }
   return false;
@@ -1055,70 +849,49 @@ bool fauxmoESP::setState(const char *device_name, bool state, unsigned char valu
     return false;
   _devices[id].state = state;
   _devices[id].value = value;
+  _devices[id].brightness = value;
   return true;
 }
 
-bool fauxmoESP::setState(unsigned char id, bool state, unsigned char value, unsigned char brightness, unsigned char hue, unsigned char saturation, unsigned char kelvin) {
+bool fauxmoESP::setState(unsigned char id, bool state, unsigned char value, unsigned char brightness, unsigned char hue, unsigned char saturation, short kelvin) {
   if (id < 0)
     return false;
   return setState(_devices[id].name, state, value, brightness, hue, saturation, kelvin);
 }
 
-bool fauxmoESP::setState(const char *device_name, bool state, unsigned char value, unsigned char brightness, unsigned char hue, unsigned char saturation, unsigned char kelvin) {
+bool fauxmoESP::setState(const char *device_name, bool state, unsigned char value, unsigned char brightness, unsigned char hue, unsigned char saturation, short kelvin) {
   int id = getDeviceId(device_name);
   if (id < 0)
     return false;
 
-  if (brightness > -1)
-    _devices[id].brightness = brightness;
-  if (hue > -1)
-    _devices[id].hue = hue;
-  if (saturation > -1)
-    _devices[id].saturation = saturation;
-  if (kelvin > -1)
-    _devices[id].kelvin = kelvin;
+  if (brightness > -1)  _devices[id].brightness = brightness;
+  if (hue > -1)         _devices[id].hue = hue;
+  if (saturation > -1)  _devices[id].saturation = saturation;
+  if (kelvin > -1)      _devices[id].kelvin = kelvin;
 
   _devices[id].state = state;
   _devices[id].value = value;
-
+  _devices[id].brightness = value;
   return true;
 }
+
+
 // -----------------------------------------------------------------------------
 // Public API
 // -----------------------------------------------------------------------------
 void fauxmoESP::setUserName(const char *user_name) {
-  /*printInColor("setUserName: ", "green");
-  Serial.println(user_name);
-  printInColor("len user_name: ", "green");
-  Serial.println(strlen(user_name));
-  printInColor("sizeof _user_name: ", "green");
-  Serial.println(sizeof(_user_name));*/
-
   if (strlen(user_name) > 0 && strlen(user_name) < sizeof(_user_name)) {
     snprintf(_user_name, strlen(user_name), "%s", user_name);
-    printInColor("snprintf username rslt: ", "green");
-    Serial.println(_user_name);
   }
-  // snprintf(_user_name, strlen(user_name), "%s", user_name);
 }
 void fauxmoESP::getUserName(char *user_name) {
-  /*printInColor("getUserName: ", "green");
-  Serial.println(user_name);
-  printInColor("len user_name: ", "green");
-  Serial.println(strlen(user_name));
-  printInColor("sizeof _user_name: ", "green");
-  Serial.println(sizeof(_user_name));*/
-
   if (strlen(user_name) > 0 && strlen(user_name) < sizeof(_user_name)) {
     snprintf(user_name, strlen(_user_name), "%s", _user_name);
-    printInColor("snprintf username rslt: ", "green");
-    Serial.println(user_name);
   }
-  // snprintf(_user_name, strlen(user_name), "%s", user_name);
 }
 
 bool fauxmoESP::process(AsyncClient *client, bool isGet, char *url, char *body) {
-  Serial.println("process");
+  //Serial.println("process");
   return _onTCPRequest(client, isGet, url, body);
 }
 
@@ -1130,7 +903,7 @@ void fauxmoESP::handle() {
 void fauxmoESP::enable(bool enable) {
   if (_user_name == NULL || strlen(_user_name) <= 5) {
     // set a default username
-    setUserName("DFpBIHardQrI3WHYTHoMcXHgEspsM8ZZRpSKtBQr");
+    setUserName("DFpBIHardQrI3WHYTHoMcXHgEspsM8ZZRpSKtBQr"); // 32 TODO
   }
 
   if (enable == _enabled)

@@ -43,10 +43,12 @@ THE SOFTWARE.
     #else
         #define DEBUG_MSG_FAUXMO(fmt, ...) { DEBUG_FAUXMO.printf(fmt, ## __VA_ARGS__); }
     #endif
+#else
+    #define DEBUG_MSG_FAUXMO(...)
 #endif
 
 #ifndef DEBUG_FAUXMO_VERBOSE_TCP
-#define DEBUG_FAUXMO_VERBOSE_TCP    true
+#define DEBUG_FAUXMO_VERBOSE_TCP    false
 #endif
 
 #ifndef DEBUG_FAUXMO_VERBOSE_UDP
@@ -79,7 +81,7 @@ typedef std::function<void(
     unsigned char,  // brightness (0-255)
     unsigned char,  // hue (0-255)
     unsigned char,  // saturation (0-255)
-    unsigned char   // kelvin (0-255)
+    short           // kelvin (0-?)
 )> TSetStateCallback;
 
 typedef struct {
@@ -89,7 +91,7 @@ typedef struct {
     unsigned char brightness;
     unsigned char hue;
     unsigned char saturation;
-    unsigned char kelvin;
+    short kelvin;
     char uniqueid[28];
 } fauxmoesp_device_t;
 
@@ -117,8 +119,8 @@ class fauxmoESP {
             unsigned char brightness,
             unsigned char hue,
             unsigned char saturation,
-            unsigned char kelvin);
-        bool setState(const char *device_name, bool state, unsigned char value, unsigned char brightness, unsigned char hue, unsigned char saturation, unsigned char kelvin);
+            short kelvin);
+        bool setState(const char *device_name, bool state, unsigned char value, unsigned char brightness, unsigned char hue, unsigned char saturation, short kelvin);
         
         bool process(AsyncClient *client, bool isGet, char * url, char * body);
         void enable(bool enable);
@@ -149,7 +151,7 @@ class fauxmoESP {
         AsyncClient * _tcpClients[FAUXMO_TCP_MAX_CLIENTS];
         TSetStateCallback _setCallback = NULL;
 
-        char * _deviceJson(unsigned char id, bool all); 	// all = true means we are listing all devices so use full description template
+        void _deviceJson(unsigned char id, char* buffer, bool all); 	// all = true means we are listing all devices so use full description template
 
         void _handleUDP();
         void _onUDPData(const IPAddress remoteIP, unsigned int remotePort, void *data, size_t len);
@@ -162,6 +164,11 @@ class fauxmoESP {
         bool _onTCPList(AsyncClient *client, char *url, char *body);
         bool _onTCPControl(AsyncClient *client, char *url, char *body);
         void _sendTCPResponse(AsyncClient *client, const char * code, char * body, const char * mime);
+        void _extract_json_content(char *body, char *content);
+        void _parseJsonString(String jsonString, bool &state, int &brightness, int &hue, int &saturation, int &kelvin);
+        unsigned char _extractValueFromText(char *url, char *searchString, char lastChar);
+
+        void _removeNewlines(char* str);
 
         String _byte2hex(uint8_t zahl);
         String _makeMD5(String text);
