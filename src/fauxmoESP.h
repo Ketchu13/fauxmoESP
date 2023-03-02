@@ -28,15 +28,18 @@ THE SOFTWARE.
 
 #pragma once
 
-#define FAUXMO_UDP_MULTICAST_IP     IPAddress(239,255,255,250)
-#define FAUXMO_UDP_MULTICAST_PORT   1900
-#define FAUXMO_TCP_MAX_CLIENTS      10
-#define FAUXMO_TCP_PORT             1901
-#define FAUXMO_RX_TIMEOUT           4
-#define FAUXMO_DEVICE_UNIQUE_ID_LENGTH  12
+#define FAUXMO_UDP_MULTICAST_IP         IPAddress(239,255,255,250)
+#define FAUXMO_UDP_MULTICAST_PORT       1900
+#define FAUXMO_TCP_MAX_CLIENTS            10
+#define FAUXMO_TCP_PORT                 1901
+#define FAUXMO_RX_TIMEOUT                  4
+#define FAUXMO_DEVICE_UNIQUE_ID_LENGTH    12
+#define FAUXMO_DEFAULT_USERNAME     "DFpBIHardQrI3WHYTHoMcXHgEspsM8ZZRpSKtBQ"
+#define FAUXMO_USERNAME_MIN_SIZE           5
+#define FAUXMO_USERNAME_MAX_SIZE          40
 #define FAUXMO_DEBUG
 #define DEBUG
-#define DEBUG_FAUXMO              Serial
+#define DEBUG_FAUXMO                    Serial
 #ifdef DEBUG_FAUXMO
     #if defined(ARDUINO_ARCH_ESP32)
         #define DEBUG_MSG_FAUXMO(fmt, ...) { DEBUG_FAUXMO.printf_P((PGM_P) PSTR(fmt), ## __VA_ARGS__); }
@@ -48,11 +51,11 @@ THE SOFTWARE.
 #endif
 
 #ifndef DEBUG_FAUXMO_VERBOSE_TCP
-#define DEBUG_FAUXMO_VERBOSE_TCP    false
+#define DEBUG_FAUXMO_VERBOSE_TCP        false
 #endif
 
 #ifndef DEBUG_FAUXMO_VERBOSE_UDP
-#define DEBUG_FAUXMO_VERBOSE_UDP    false
+#define DEBUG_FAUXMO_VERBOSE_UDP        false
 #endif
 
 #include <Arduino.h>
@@ -135,6 +138,8 @@ class fauxmoESP {
         void printInColor(String text, String color);
         void printInColor(String text, String color, bool newLine);
         void printInColorln(String text, String color);
+        void check_UserName();
+        bool checkUserNameFormat(char* user_name);
 
     private:
         AsyncServer * _server;
@@ -143,7 +148,7 @@ class fauxmoESP {
         unsigned int _tcp_port = FAUXMO_TCP_PORT;
         std::vector<fauxmoesp_device_t> _devices;
         const char *_uniqueIdSuffix = "00:00";
-        char _user_name[56];
+        char _user_name[41];
 		#ifdef ESP8266
             WiFiEventHandler _handler;
 		#endif
@@ -166,8 +171,9 @@ class fauxmoESP {
         void _sendTCPResponse(AsyncClient *client, const char * code, char * body, const char * mime);
         void _extract_json_content(char *body, char *content);
         void _parseJsonString(String jsonString, bool &state, int &brightness, int &hue, int &saturation, int &kelvin);
+        bool _isEmpty(char* user_name);
         unsigned char _extractValueFromText(char *url, char *searchString, char lastChar);
-
+        void _extractPathFromUrl(const char *url, char *path, size_t path_size);
         void _removeNewlines(char* str);
 
         String _byte2hex(uint8_t zahl);
